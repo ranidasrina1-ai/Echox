@@ -34,12 +34,12 @@ class EchoViewModel(app: Application) : AndroidViewModel(app) {
 
     private val holder = PlayerHolder(app)
 
-    // The NewPipe page URL of whatever is currently loaded, so a playback
-    // failure (expired/throttled stream link) can be recovered by
-    // re-resolving from this instead of just showing an error.
     private var currentSourceUrl: String? = null
     private var retryCount = 0
     private val maxAutoRetries = 2
+
+    private val _history = MutableStateFlow<List<SearchResult>>(emptyList())
+    val history: StateFlow<List<SearchResult>> = _history.asStateFlow()
 
     init {
         holder.onPlaybackError = { positionMs, _ -> retryCurrentStream(positionMs) }
@@ -54,17 +54,11 @@ class EchoViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectScreen(screen: Screen) { _currentScreen.value = screen }
 
-    // ---- Video/Music mode (now a per-player switch, not global) ----
+    // ---- Video/Music mode ----
 
     private val _mode = MutableStateFlow(Mode.MUSIC)
     val mode: StateFlow<Mode> = _mode.asStateFlow()
 
-    /**
-     * Switches the CURRENTLY PLAYING track between video and audio-only,
-     * preserving playback position — this is what the switch inside the
-     * full player screen calls. No re-fetch needed since [nowPlaying]
-     * already has both stream URLs resolved.
-     */
     fun switchMode(newMode: Mode) {
         if (_mode.value == newMode) return
         _mode.value = newMode
@@ -119,10 +113,7 @@ class EchoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Library (recently played) ----
-
-    private val _history = MutableStateFlow<List<SearchResult>>(emptyList())
-    val history: StateFlow<List<SearchResult>> = _history.asStateFlow()
+    // ---- Library ----
 
     fun clearHistory() {
         HistoryStore.clear(getApplication())
@@ -166,13 +157,6 @@ class EchoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Re-resolves the currently playing item's stream (fresh URL from
-     * YouTube) and resumes playback from [positionMs]. Runs automatically
-     * when [PlayerHolder] reports a playback error (expired/throttled link),
-     * up to [maxAutoRetries] times per track so a genuinely broken video
-     * doesn't retry forever.
-     */
     private fun retryCurrentStream(positionMs: Long) {
         val sourceUrl = currentSourceUrl ?: return
         if (retryCount >= maxAutoRetries) {
